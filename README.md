@@ -1,11 +1,16 @@
-<div align="center">
+# Strait of Hormuz
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+## About the Game
+Strait of Hormuz is a tactical missile interception and naval combat simulation. Players take control of a coastal defense system tasked with neutralizing tankers attempting to traverse the heavily guarded strait.
 
-  <h1>Built with AI Studio</h2>
+## Created By
+**Aniruddha Hossen**
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Intention
+This game was developed with the intention of reflecting the recent and ongoing geopolitical tensions in the Strait of Hormuz, a critical maritime chokepoint for global energy supplies. The simulation highlights the strategic importance and the high-stakes nature of maritime security in the region.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+## Gameplay
+- **Objective:** Neutralize a target number of tankers in each sector to advance.
+- **Threat:** Intercept incoming missiles targeting your launchpad.
+- **Failure Condition:** If too many tankers escape or your launchpad integrity reaches zero, the mission is aborted.
+- **Armory:** Use earned credits to purchase Super Missiles for high-priority targets.
