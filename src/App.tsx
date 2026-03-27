@@ -380,16 +380,31 @@ export default function App() {
     });
   };
 
-  const fireMissile = (e: React.MouseEvent | MouseEvent, isSuper: boolean = false) => {
+  const fireMissile = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent, isSuper: boolean = false) => {
     if (gameState !== 'PLAYING' || (cooldown > 0 && !isSuper)) return;
     if (isSuper && superMissiles <= 0) return;
     if (!isSuper && missilesRemaining <= 0) return;
 
+    // Prevent default to stop zooming/panning on mobile
+    if (e.cancelable) e.preventDefault();
+
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const targetX = (e as any).clientX - rect.left;
-    const targetY = (e as any).clientY - rect.top;
+    let clientX, clientY;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if ('changedTouches' in e && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = (e as any).clientX;
+      clientY = (e as any).clientY;
+    }
+
+    const targetX = clientX - rect.left;
+    const targetY = clientY - rect.top;
 
     const startX = CANVAS_WIDTH / 2;
     const startY = COASTLINE_Y;
@@ -1019,8 +1034,10 @@ export default function App() {
 
   return (
     <div 
-      className="h-screen w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-2 overflow-hidden relative"
+      className="h-screen w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-2 overflow-hidden relative touch-none"
       onClick={(e) => fireMissile(e as any)}
+      onTouchStart={(e) => fireMissile(e as any)}
+      onContextMenu={(e) => e.preventDefault()}
     >
       {/* Mobile Prompt */}
       <AnimatePresence>
@@ -1283,7 +1300,7 @@ export default function App() {
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="cursor-crosshair block max-w-full max-h-full object-contain bg-[#0a192f]"
+          className="cursor-crosshair block max-w-full max-h-full object-contain bg-[#0a192f] touch-none"
         />
 
         {/* Super Missile Button */}
