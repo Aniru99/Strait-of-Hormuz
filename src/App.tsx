@@ -9,7 +9,7 @@ import { Shield, Zap, Play, RotateCcw, ShoppingCart, X, Trophy, AlertTriangle, H
 
 // --- Types & Constants ---
 
-type GameState = 'INTRO' | 'CINEMATIC_INTRO' | 'DIFFICULTY_SELECT' | 'START' | 'PLAYING' | 'GAMEOVER' | 'LEVEL_COMPLETE' | 'MISSION_ACCOMPLISHED';
+type GameState = 'INTRO' | 'CINEMATIC_INTRO' | 'DIFFICULTY_SELECT' | 'STORY_CINEMATIC' | 'START' | 'PLAYING' | 'GAMEOVER' | 'LEVEL_COMPLETE' | 'MISSION_ACCOMPLISHED';
 type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
 interface Entity {
@@ -161,6 +161,239 @@ const createSound = (type: 'launch' | 'explosion' | 'music' | 'baseHit' | 'tanke
     oscillator.stop(audioCtx.currentTime + 0.6);
     noise.stop(audioCtx.currentTime + 0.6);
   }
+};
+
+// --- Story Cinematic Component ---
+
+const StoryCinematic: React.FC<{ onComplete: () => void, difficulty: Difficulty }> = ({ onComplete, difficulty }) => {
+  const [scene, setScene] = useState(1);
+  const [textIndex, setTextIndex] = useState(0);
+
+  const scene1Text = [
+    "[ALLIED COMMAND]",
+    "STATUS: CRITICAL.",
+    "COMMODORE: \"Gentlemen, the global economy relies on the flow of energy. We have received intelligence that the Strait is being reinforced with hostile missile bases.\"",
+    "COMMANDER: \"We have one directive. We must pass the oil tankers at *any* cost. We will destroy their attacking bases if they fire.\""
+  ];
+
+  const scene3Text = [
+    "[REGIONAL DEFENSE COMMAND]",
+    "ALERT: NAVAL CONVOY APPROACHING.",
+    "LEADER: \"They think they can violate our waters. They are testing our resolve.\"",
+    "COMMANDER: \"They will not pass. Not a *single* tanker should pass by. ATTACK ALL!!\""
+  ];
+
+  useEffect(() => {
+    let timer: any;
+    if (scene === 1) {
+      if (textIndex < scene1Text.length - 1) {
+        timer = setTimeout(() => setTextIndex(prev => prev + 1), 2500);
+      } else {
+        timer = setTimeout(() => {
+          setScene(2);
+          setTextIndex(0);
+        }, 3000);
+      }
+    } else if (scene === 2) {
+      timer = setTimeout(() => setScene(3), 3000);
+    } else if (scene === 3) {
+      if (textIndex < scene3Text.length - 1) {
+        timer = setTimeout(() => setTextIndex(prev => prev + 1), 2500);
+      } else {
+        timer = setTimeout(() => setScene(4), 3000);
+      }
+    } else if (scene === 4) {
+      timer = setTimeout(() => onComplete(), 2000);
+    }
+    return () => clearTimeout(timer);
+  }, [scene, textIndex]);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[250] bg-black overflow-hidden flex flex-col items-center justify-center font-mono"
+    >
+      <AnimatePresence mode="wait">
+        {scene === 1 && (
+          <motion.div 
+            key="scene1"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="w-full h-full flex flex-col items-center justify-center p-10 bg-[radial-gradient(circle_at_center,rgba(6,78,59,0.2)_0%,rgba(0,0,0,1)_70%)]"
+          >
+            <div className="absolute top-10 left-10 border-l-2 border-emerald-500 pl-4 py-2">
+              <p className="text-emerald-500 text-[10px] tracking-[0.5em] uppercase">UPLINK: SECURE</p>
+              <p className="text-emerald-800 text-[8px] uppercase">ENCRYPTION: AES-256</p>
+            </div>
+
+            <div className="relative w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+              <motion.div 
+                initial={{ x: -50, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className="relative h-96 bg-emerald-950/20 border border-emerald-500/30 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.1)_1px,transparent_1px)] bg-[length:100%_4px]" />
+                <svg viewBox="0 0 200 300" className="w-full h-full opacity-40">
+                  <path d="M100,50 Q130,50 140,80 T130,150 L150,250 L50,250 L70,150 T60,80 Q70,50 100,50" fill="#064e3b" />
+                  <circle cx="100" cy="80" r="25" fill="#065f46" />
+                </svg>
+                <div className="absolute bottom-4 left-4 right-4 bg-black/60 p-2 border border-emerald-500/20">
+                  <p className="text-emerald-500 text-[8px] uppercase tracking-widest">Subject: COMMODORE_A1</p>
+                </div>
+              </motion.div>
+
+              <div className="space-y-4">
+                {scene1Text.slice(0, textIndex + 1).map((line, i) => (
+                  <motion.p 
+                    key={i}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`text-sm md:text-lg leading-relaxed ${i === 0 ? 'text-emerald-400 font-black tracking-widest' : i === 1 ? 'text-red-500 font-bold' : 'text-emerald-100'}`}
+                  >
+                    {line}
+                  </motion.p>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {scene === 2 && (
+          <motion.div 
+            key="scene2"
+            initial={{ opacity: 0, scale: 1.2 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="w-full h-full flex flex-col items-center justify-center bg-black"
+          >
+            <div className="relative w-full max-w-5xl aspect-video border-2 border-red-600/30 bg-red-950/5">
+              <svg viewBox="0 0 1000 600" className="w-full h-full">
+                <path d="M0,100 L150,120 Q300,150 450,80 T700,120 T1000,60 L1000,0 L0,0 Z" fill="#1e293b" stroke="#334155" strokeWidth="2" />
+                <path d="M0,500 L200,480 Q400,450 550,520 T800,480 T1000,540 L1000,600 L0,600 Z" fill="#0f172a" stroke="#1e293b" strokeWidth="2" />
+                
+                <motion.circle 
+                  cx="520" cy="350" r="80" 
+                  fill="rgba(239, 68, 68, 0.1)" 
+                  stroke="rgba(239, 68, 68, 0.5)" 
+                  strokeDasharray="5,5"
+                  animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                />
+                
+                <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
+                  <circle cx="520" cy="350" r="5" fill="red" />
+                  <text x="530" y="355" fill="red" fontSize="14" fontWeight="black" className="uppercase tracking-widest">DANGER ZONE: HOSTILE BATTERIES</text>
+                </motion.g>
+
+                <motion.path 
+                  d="M100,300 L900,300" 
+                  stroke="rgba(245, 158, 11, 0.3)" 
+                  strokeWidth="2" 
+                  strokeDasharray="10,10"
+                  animate={{ strokeDashoffset: [0, -100] }}
+                  transition={{ repeat: Infinity, duration: 5, ease: "linear" }}
+                />
+              </svg>
+              
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 2 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-red-600 text-white px-10 py-4 font-black text-4xl italic tracking-tighter uppercase skew-x-[-10deg] shadow-[10px_10px_0_rgba(0,0,0,1)]"
+                >
+                  INTELLIGENCE REVEALED
+                </motion.div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {scene === 3 && (
+          <motion.div 
+            key="scene3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="w-full h-full flex flex-col items-center justify-center p-10 bg-[radial-gradient(circle_at_center,rgba(153,27,27,0.2)_0%,rgba(0,0,0,1)_70%)]"
+          >
+            <div className="absolute top-10 right-10 border-r-2 border-red-600 pr-4 py-2 text-right">
+              <p className="text-red-500 text-[10px] tracking-[0.5em] uppercase">ALERT: INTRUSION</p>
+              <p className="text-red-800 text-[8px] uppercase">DEFENSE STATE: MAXIMUM</p>
+            </div>
+
+            <div className="relative w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+              <div className="space-y-4 order-2 md:order-1">
+                {scene3Text.slice(0, textIndex + 1).map((line, i) => (
+                  <motion.p 
+                    key={i}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`text-sm md:text-lg leading-relaxed ${i === 0 ? 'text-red-500 font-black tracking-widest' : i === 1 ? 'text-yellow-500 font-bold' : 'text-red-100'}`}
+                  >
+                    {line}
+                  </motion.p>
+                ))}
+              </div>
+
+              <motion.div 
+                initial={{ x: 50, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className="relative h-96 bg-red-950/20 border border-red-500/30 overflow-hidden order-1 md:order-2"
+              >
+                <div className="absolute inset-0 bg-[linear-gradient(rgba(239,68,68,0.1)_1px,transparent_1px)] bg-[length:100%_4px]" />
+                <svg viewBox="0 0 200 300" className="w-full h-full opacity-40">
+                  <path d="M100,50 Q130,50 140,80 T130,150 L150,250 L50,250 L70,150 T60,80 Q70,50 100,50" fill="#991b1b" />
+                  <circle cx="100" cy="80" r="25" fill="#7f1d1d" />
+                  <motion.circle 
+                    cx="100" cy="200" r="10" 
+                    fill="red" 
+                    animate={{ scale: [0, 2], opacity: [1, 0] }} 
+                    transition={{ repeat: Infinity, duration: 1 }} 
+                  />
+                </svg>
+                <div className="absolute bottom-4 left-4 right-4 bg-black/60 p-2 border border-red-500/20">
+                  <p className="text-red-500 text-[8px] uppercase tracking-widest">Subject: DEFENSE_LEADER_X</p>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+
+        {scene === 4 && (
+          <motion.div 
+            key="scene4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="w-full h-full flex flex-col items-center justify-center bg-black"
+          >
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1.2, opacity: 1 }}
+              transition={{ duration: 1.5 }}
+              className="text-center"
+            >
+              <h2 className="text-6xl font-black text-white mb-4 italic tracking-tighter uppercase">ENGAGING PROTOCOL</h2>
+              <div className="flex gap-2 justify-center">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <motion.div 
+                    key={i}
+                    className="w-4 h-4 bg-red-600"
+                    animate={{ opacity: [0, 1, 0] }}
+                    transition={{ repeat: Infinity, duration: 0.5, delay: i * 0.1 }}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="absolute inset-0 pointer-events-none opacity-[0.05] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
+    </motion.div>
+  );
 };
 
 // --- Main Component ---
@@ -1421,7 +1654,7 @@ export default function App() {
                   transition={{ delay: 5 }}
                   whileHover={{ scale: 1.05, backgroundColor: "rgba(239, 68, 68, 1)" }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setGameState('DIFFICULTY_SELECT')}
+                  onClick={() => setGameState('STORY_CINEMATIC')}
                   className="group relative px-16 py-5 bg-red-600 text-white font-black tracking-[0.3em] uppercase transition-all overflow-hidden"
                 >
                   <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
@@ -1488,6 +1721,13 @@ export default function App() {
               <RotateCcw className="w-4 h-4" /> Return to Menu
             </button>
           </motion.div>
+        )}
+
+        {gameState === 'STORY_CINEMATIC' && (
+          <StoryCinematic 
+            onComplete={() => setGameState('DIFFICULTY_SELECT')} 
+            difficulty={difficulty}
+          />
         )}
 
         {gameState === 'MISSION_ACCOMPLISHED' && (
