@@ -1070,7 +1070,7 @@ export default function App() {
 
   return (
     <div 
-      className="h-screen w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-2 overflow-hidden relative touch-none"
+      className="h-screen w-screen md:h-screen md:w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center p-0 md:p-2 overflow-hidden relative touch-none"
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Mobile Prompt */}
@@ -1611,36 +1611,18 @@ export default function App() {
         )}
 
         {/* Missile Cooldown Overlay */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
-          <div className="w-48 h-1 bg-gray-900 rounded-full overflow-hidden">
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
+          <div className="w-40 h-1 bg-gray-900 rounded-full overflow-hidden">
             <motion.div 
               className="h-full bg-red-500"
               animate={{ width: `${100 - cooldown}%` }}
               transition={{ duration: 0.1 }}
             />
           </div>
-          <p className="text-[9px] font-mono text-red-900 mt-1 uppercase tracking-widest">
+          <p className="text-[8px] font-mono text-red-900 mt-1 uppercase tracking-widest">
             {cooldown > 0 ? 'Reloading...' : 'Weapon System Ready'}
           </p>
         </div>
-
-        {/* Mobile Shop Button (Floating) */}
-        {gameState === 'PLAYING' && (
-          <motion.button
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowShop(true);
-            }}
-            className="md:hidden absolute bottom-20 right-4 bg-emerald-600/80 text-white p-4 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] z-[60] backdrop-blur-sm border-2 border-emerald-400/50 active:scale-90 transition-transform"
-          >
-            <ShoppingCart className="w-6 h-6" />
-            <div className="absolute -top-1 -right-1 bg-red-600 text-[8px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
-              SHOP
-            </div>
-          </motion.button>
-        )}
 
         {/* Overlays */}
         <AnimatePresence>
@@ -1783,19 +1765,19 @@ export default function App() {
       </div>
 
       {/* Bottom Controls & Shop */}
-      <div className="fixed bottom-0 left-0 w-full md:relative md:bottom-auto md:left-auto md:w-full max-w-[1000px] md:mt-4 flex flex-col md:flex-row justify-between items-center gap-2 md:gap-0 px-4 md:px-0 pb-2 md:pb-0 bg-black/80 md:bg-transparent backdrop-blur-md md:backdrop-blur-none z-50 border-t border-emerald-500/20 md:border-none">
-        <div className="flex gap-4 w-full md:w-auto justify-center md:justify-start py-2 md:py-0">
+      <div className="relative w-full max-w-[1000px] mt-auto md:mt-4 flex flex-col md:flex-row justify-between items-center gap-1 md:gap-0 px-4 md:px-0 py-2 md:py-0 bg-black/60 md:bg-transparent backdrop-blur-md md:backdrop-blur-none z-50 border-t border-emerald-500/30 md:border-none shrink-0 min-h-[50px] md:min-h-0">
+        <div className="flex gap-2 w-full md:w-auto justify-center md:justify-start">
           <button 
             onClick={(e) => {
               e.stopPropagation();
               setShowShop(true);
             }}
-            className="flex items-center gap-2 px-6 py-2 md:px-4 md:py-2 bg-emerald-500/20 md:bg-emerald-500/10 border-2 md:border border-emerald-500/50 md:border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-all font-mono text-sm md:text-xs uppercase shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+            className="flex items-center gap-2 px-6 py-2 md:px-4 md:py-2 bg-emerald-600 md:bg-emerald-500/10 border md:border border-emerald-400 md:border-emerald-500/30 text-white md:text-emerald-400 hover:bg-emerald-500/20 transition-all font-mono text-xs uppercase shadow-[0_0_15px_rgba(16,185,129,0.3)] rounded-sm font-bold"
           >
-            <ShoppingCart className="w-5 h-5 md:w-4 md:h-4" /> Upgrade Systems
+            <ShoppingCart className="w-4 h-4" /> Upgrade Systems
           </button>
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 border border-gray-800 text-gray-500 font-mono text-[10px] uppercase">
-            Difficulty: <span className="text-emerald-500">{difficulty}</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-900 border border-gray-800 text-gray-400 font-mono text-[9px] uppercase">
+            Difficulty: <span className="text-emerald-500 font-bold">{difficulty}</span>
           </div>
         </div>
         <div className="text-[10px] font-mono text-emerald-600 uppercase tracking-widest hidden md:block">
