@@ -22,6 +22,10 @@ interface Entity {
   health?: number;
   maxHealth?: number;
   type: 'TANKER' | 'HOSTILE' | 'MISSILE';
+  ironDomeHealth?: number;
+  hasIronDome?: boolean;
+  yOffset?: number;
+  yDirection?: number;
 }
 
 interface Hostile extends Entity {
@@ -176,10 +180,10 @@ export default function App() {
   const [superMissiles, setSuperMissiles] = useState(0);
   const [superMissilesPurchasedThisLevel, setSuperMissilesPurchasedThisLevel] = useState(0);
   const [missilesRemaining, setMissilesRemaining] = useState(150);
-  const [showOrientationWarning, setShowOrientationWarning] = useState(false);
+  const [showMobilePrompt, setShowMobilePrompt] = useState(false);
 
   // Upgrades
-  const [missileSpeed, setMissileSpeed] = useState(25); // Significantly faster
+  const [missileSpeed, setMissileSpeed] = useState(18); // Decreased speed
   const [tankerArmor, setTankerArmor] = useState(1); // Not used in attack mode for player, but kept for logic
   const [cooldownRate, setCooldownRate] = useState(2.5); // Much faster reload
 
@@ -212,6 +216,7 @@ export default function App() {
 
   const lastSpawnRef = useRef(0);
   const lastIncomingMissileSpawnRef = useRef(0);
+  const tankersSpawnedThisLevelRef = useRef(0);
   const frameRef = useRef(0);
 
   const resetGameData = () => {
@@ -225,7 +230,8 @@ export default function App() {
     setSuperMissiles(0);
     setSuperMissilesPurchasedThisLevel(0);
     setMissilesRemaining(150);
-    setMissileSpeed(25);
+    setMissileSpeed(18);
+    tankersSpawnedThisLevelRef.current = 0;
     setCooldownRate(2.5);
     entitiesRef.current = {
       tankers: [],
@@ -247,6 +253,7 @@ export default function App() {
     setSuperMissilesPurchasedThisLevel(0);
     setMissilesRemaining(150);
     setLevel(1);
+    tankersSpawnedThisLevelRef.current = 0;
     entitiesRef.current = {
       tankers: [],
       hostiles: [],
@@ -279,6 +286,7 @@ export default function App() {
     setLaunchpadHealth(5);
     setSuperMissilesPurchasedThisLevel(0);
     setMissilesRemaining(150);
+    tankersSpawnedThisLevelRef.current = 0;
     setGameState('PLAYING');
     entitiesRef.current = {
       tankers: [],
@@ -291,8 +299,18 @@ export default function App() {
   };
 
   const spawnTanker = () => {
-    const levelSpeed = 1 + (level * 0.2);
-    const y = 100;
+    const levelSpeed = 1.5 + (level * 0.3); // Increased ship speed
+    const y = 100 + (Math.random() * 100); // Random initial Y
+    
+    tankersSpawnedThisLevelRef.current += 1;
+    
+    // Iron Dome frequency: 3 times per sector (at ships 3, 7, 11)
+    let hasIronDome = false;
+    const currentCount = tankersSpawnedThisLevelRef.current;
+    if (currentCount === 3 || currentCount === 7 || currentCount === 11) {
+      hasIronDome = true;
+    }
+
     entitiesRef.current.tankers.push({
       x: -120,
       y: y,
@@ -303,6 +321,10 @@ export default function App() {
       health: 100,
       maxHealth: 100,
       type: 'TANKER',
+      hasIronDome: hasIronDome,
+      ironDomeHealth: hasIronDome ? 5 : 0, // 5 missiles to break
+      yOffset: 0,
+      yDirection: Math.random() > 0.5 ? 1 : -1,
     });
   };
 
@@ -460,6 +482,16 @@ export default function App() {
     for (let i = tankers.length - 1; i >= 0; i--) {
       const t = tankers[i];
       t.x += t.speed;
+      
+      // Random vertical movement
+      if (t.yOffset !== undefined && t.yDirection !== undefined) {
+        t.yOffset += t.yDirection * 0.5;
+        if (Math.abs(t.yOffset) > 30) {
+          t.yDirection *= -1;
+        }
+        t.y += t.yDirection * 0.5;
+      }
+
       if (t.x > CANVAS_WIDTH) {
         tankers.splice(i, 1);
         setShipsEscaped(prev => {
@@ -565,6 +597,22 @@ export default function App() {
           m.y > t.y
         ) {
           missiles.splice(i, 1);
+          
+          // Handle Iron Dome
+          if (t.hasIronDome && t.ironDomeHealth !== undefined && t.ironDomeHealth > 0) {
+            // Super missile bypasses dome and destroys it too, then hits the ship
+            if (m.isSuper) {
+              t.ironDomeHealth = 0;
+            } else {
+              // Standard missile hits dome
+              t.ironDomeHealth -= 1;
+              explosions.push({ x: m.x, y: m.y, radius: 40, life: 1 });
+              createSound('intercept');
+              missileRemoved = true;
+              break;
+            }
+          }
+
           // Standard missile: 50 damage (2 hits to kill 100 HP tanker)
           // Super missile: 100 damage (1 hit to kill 100 HP tanker)
           let damage = m.isSuper ? 100 : 50;
@@ -690,9 +738,94 @@ export default function App() {
       ctx.stroke();
     });
 
-    // Draw Tankers
-    tankers.forEach(t => {
-      // Main Hull
+      // Draw Tankers
+      tankers.forEach(t => {
+        // Iron Dome Visual
+        if (t.hasIronDome && t.ironDomeHealth !== undefined && t.ironDomeHealth > 0) {
+          ctx.save();
+          const pulse = Math.sin(Date.now() / 150) * 0.2 + 0.8;
+          ctx.strokeStyle = `rgba(0, 255, 255, ${pulse})`;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([5, 5]);
+          ctx.lineDashOffset = -Date.now() / 20;
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 1.0 * pulse, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0, 255, 255, ${pulse * 0.15})`;
+          ctx.fill();
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.9 * pulse, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0, 255, 255, ${pulse * 0.1})`;
+          ctx.fill();
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.8 * pulse, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0, 255, 255, ${pulse * 0.02})`;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.7 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.6 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.5 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.4 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.3 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.2 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.1 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, t.width * 0.05 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.arc(t.x + t.width / 2, t.y + t.height / 2, 2, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.shadowBlur = 30 * pulse;
+          ctx.shadowColor = '#00ffff';
+          ctx.stroke();
+          
+          ctx.shadowBlur = 10 * (1 - pulse);
+          ctx.shadowColor = '#ffffff';
+          ctx.stroke();
+          ctx.restore();
+
+          // Iron Dome Health Bar
+          const domeBarWidth = 80;
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(t.x + t.width / 2 - domeBarWidth / 2, t.y - 40, domeBarWidth, 6);
+          ctx.fillStyle = '#00ffff';
+          ctx.fillRect(t.x + t.width / 2 - domeBarWidth / 2, t.y - 40, (t.ironDomeHealth / 5) * domeBarWidth, 6);
+
+          // Shield Label
+          const textPulse = Math.sin(Date.now() / 150) * 0.3 + 0.7;
+          ctx.fillStyle = `rgba(0, 255, 255, ${textPulse})`;
+          ctx.font = 'bold 14px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('SHIELD ACTIVE', t.x + t.width / 2, t.y - 50);
+          ctx.textAlign = 'left'; // Reset
+        }
+
+        // Main Hull
       ctx.fillStyle = t.color;
       ctx.fillRect(t.x, t.y, t.width, t.height);
       
@@ -824,11 +957,10 @@ export default function App() {
   useEffect(() => {
     const checkDevice = () => {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const isPortrait = window.innerHeight > window.innerWidth;
-      if (isMobile || (isPortrait && window.innerWidth < 1024)) {
-        setShowOrientationWarning(true);
+      if (isMobile) {
+        setShowMobilePrompt(true);
       } else {
-        setShowOrientationWarning(false);
+        setShowMobilePrompt(false);
       }
     };
     window.addEventListener('resize', checkDevice);
@@ -890,18 +1022,27 @@ export default function App() {
       className="h-screen w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-2 overflow-hidden relative"
       onClick={(e) => fireMissile(e as any)}
     >
-      {/* Mobile Orientation Warning */}
+      {/* Mobile Prompt */}
       <AnimatePresence>
-        {showOrientationWarning && (
+        {showMobilePrompt && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[300] bg-black flex flex-col items-center justify-center p-10 text-center"
           >
-            <RotateCcw className="w-20 h-20 text-red-500 mb-6 animate-spin" />
-            <h2 className="text-3xl font-black text-white mb-4 uppercase italic">Desktop Mode Required</h2>
-            <p className="text-gray-400 font-mono text-sm uppercase tracking-widest">This tactical simulation is optimized for desktop environments. Please switch to a desktop browser to engage in the Strait of Hormuz conflict.</p>
+            <AlertTriangle className="w-20 h-20 text-yellow-500 mb-6" />
+            <h2 className="text-3xl font-black text-white mb-4 uppercase italic">Mobile Device Detected</h2>
+            <p className="text-gray-400 font-mono text-sm uppercase tracking-widest mb-8">This tactical simulation is optimized for desktop environments.</p>
+            <div className="bg-red-600/20 border-2 border-red-600 p-6 skew-x-[-10deg]">
+              <p className="text-red-500 font-black text-xl uppercase italic tracking-tighter">Please active browser mode to play</p>
+            </div>
+            <button 
+              onClick={() => setShowMobilePrompt(false)}
+              className="mt-8 px-8 py-3 bg-white text-black font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors"
+            >
+              Dismiss
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
