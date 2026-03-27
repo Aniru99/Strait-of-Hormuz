@@ -9,7 +9,7 @@ import { Shield, Zap, Play, RotateCcw, ShoppingCart, X, Trophy, AlertTriangle, H
 
 // --- Types & Constants ---
 
-type GameState = 'INTRO' | 'DIFFICULTY_SELECT' | 'START' | 'PLAYING' | 'GAMEOVER' | 'LEVEL_COMPLETE' | 'MISSION_ACCOMPLISHED';
+type GameState = 'INTRO' | 'CINEMATIC_INTRO' | 'DIFFICULTY_SELECT' | 'START' | 'PLAYING' | 'GAMEOVER' | 'LEVEL_COMPLETE' | 'MISSION_ACCOMPLISHED';
 type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
 interface Entity {
@@ -354,9 +354,10 @@ export default function App() {
     const startX = Math.random() * CANVAS_WIDTH;
     const startY = -20;
     
-    let targetX, targetY;
-    targetX = CANVAS_WIDTH / 2;
-    targetY = COASTLINE_Y;
+    // Target one of the 3 launchpads randomly
+    const launchpadPositions = [CANVAS_WIDTH * 0.25, CANVAS_WIDTH * 0.5, CANVAS_WIDTH * 0.75];
+    const targetX = launchpadPositions[Math.floor(Math.random() * launchpadPositions.length)];
+    const targetY = COASTLINE_Y;
 
     const dx = targetX - startX;
     const dy = targetY - startY;
@@ -406,7 +407,11 @@ export default function App() {
     const targetX = clientX - rect.left;
     const targetY = clientY - rect.top;
 
-    const startX = CANVAS_WIDTH / 2;
+    // Fire from the closest of the 3 launchpads
+    const launchpadPositions = [CANVAS_WIDTH * 0.25, CANVAS_WIDTH * 0.5, CANVAS_WIDTH * 0.75];
+    const startX = launchpadPositions.reduce((prev, curr) => 
+      Math.abs(curr - targetX) < Math.abs(prev - targetX) ? curr : prev
+    );
     const startY = COASTLINE_Y;
 
     const dx = targetX - startX;
@@ -526,9 +531,20 @@ export default function App() {
       im.x += im.vx;
       im.y += im.vy;
 
-      // Check if hit launchpad
-      const distToLaunchpad = Math.sqrt(Math.pow(im.x - CANVAS_WIDTH/2, 2) + Math.pow(im.y - COASTLINE_Y, 2));
-      if (distToLaunchpad < 20) {
+      // Check if hit any of the 3 launchpads
+      const launchpadPositions = [CANVAS_WIDTH * 0.25, CANVAS_WIDTH * 0.5, CANVAS_WIDTH * 0.75];
+      let hitLaunchpad = false;
+      
+      for (const lx of launchpadPositions) {
+        const distToLaunchpad = Math.sqrt(Math.pow(im.x - lx, 2) + Math.pow(im.y - COASTLINE_Y, 2));
+        if (distToLaunchpad < 30) {
+          hitLaunchpad = true;
+          explosions.push({ x: lx, y: COASTLINE_Y, radius: 100, life: 1 });
+          break;
+        }
+      }
+
+      if (hitLaunchpad) {
         incomingMissiles.splice(i, 1);
         
         // Less damage on Easy/Medium
@@ -541,7 +557,6 @@ export default function App() {
           }
           return next;
         });
-        explosions.push({ x: CANVAS_WIDTH/2, y: COASTLINE_Y, radius: 100, life: 1 });
         createSound('baseHit');
         continue;
       }
@@ -720,13 +735,34 @@ export default function App() {
     ctx.fillStyle = '#2d3748';
     ctx.fillRect(0, COASTLINE_Y, CANVAS_WIDTH, 20);
     
-    // Base
-    ctx.fillStyle = '#48bb78';
-    ctx.fillRect(CANVAS_WIDTH / 2 - 20, COASTLINE_Y - 10, 40, 20); 
-    
-    // Player Launcher
-    ctx.fillStyle = '#63b3ed';
-    ctx.fillRect(CANVAS_WIDTH / 2 - 10, COASTLINE_Y - 5, 20, 10);
+    // 3 Defensive Domes/Bases
+    const launchpadPositions = [CANVAS_WIDTH * 0.25, CANVAS_WIDTH * 0.5, CANVAS_WIDTH * 0.75];
+    launchpadPositions.forEach(lx => {
+      // Base Structure
+      ctx.fillStyle = '#48bb78';
+      ctx.fillRect(lx - 25, COASTLINE_Y - 15, 50, 25); 
+      
+      // Launcher
+      ctx.fillStyle = '#63b3ed';
+      ctx.fillRect(lx - 10, COASTLINE_Y - 5, 20, 10);
+
+      // Dome Visual Effect (Shield)
+      ctx.save();
+      const pulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
+      const gradient = ctx.createRadialGradient(lx, COASTLINE_Y, 5, lx, COASTLINE_Y, 40);
+      gradient.addColorStop(0, 'rgba(0, 255, 255, 0.4)');
+      gradient.addColorStop(1, 'rgba(0, 255, 255, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(lx, COASTLINE_Y, 40 * pulse, Math.PI, 0);
+      ctx.fill();
+      
+      ctx.strokeStyle = `rgba(0, 255, 255, ${0.3 * pulse})`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.restore();
+    });
 
     const { tankers, hostiles, missiles, incomingMissiles, explosions } = entitiesRef.current;
 
@@ -1035,8 +1071,6 @@ export default function App() {
   return (
     <div 
       className="h-screen w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-2 overflow-hidden relative touch-none"
-      onClick={(e) => fireMissile(e as any)}
-      onTouchStart={(e) => fireMissile(e as any)}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Mobile Prompt */}
@@ -1131,7 +1165,7 @@ export default function App() {
                     if (!audioCtx || audioCtx.state === 'suspended') {
                       startBattleMusic();
                     }
-                    setGameState('DIFFICULTY_SELECT');
+                    setGameState('CINEMATIC_INTRO');
                   }}
                   className="px-20 py-5 bg-red-600 text-white font-black tracking-[0.2em] uppercase hover:bg-red-500 transition-all skew-x-[-12deg] shadow-[10px_10px_0_rgba(0,0,0,1)]"
                 >
@@ -1146,6 +1180,258 @@ export default function App() {
                 </div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+
+        {gameState === 'CINEMATIC_INTRO' && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[195] bg-[#050505] flex flex-col items-center justify-center overflow-hidden font-mono"
+          >
+            {/* Tactical Map Background */}
+            <motion.div 
+              initial={{ scale: 1.2, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 8, ease: "easeOut" }}
+              className="absolute inset-0 pointer-events-none"
+            >
+              {/* Dark Satellite Base */}
+              <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=2074&auto=format&fit=crop')] bg-cover bg-center opacity-30 grayscale contrast-125" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/60" />
+              
+              <svg viewBox="0 0 1000 600" className="w-full h-full">
+                <defs>
+                  <filter id="glow-cinematic">
+                    <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+                    <feMerge>
+                      <feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                  </filter>
+                </defs>
+                
+                {/* Grid Lines */}
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <line key={`v-${i}`} x1={i * 50} y1="0" x2={i * 50} y2="600" stroke="rgba(16, 185, 129, 0.08)" strokeWidth="0.5" />
+                ))}
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <line key={`h-${i}`} x1="0" y1={i * 50} x2="1000" y2={i * 50} stroke="rgba(16, 185, 129, 0.08)" strokeWidth="0.5" />
+                ))}
+
+                {/* Coastlines (Stylized) */}
+                <path d="M50,150 Q250,100 450,200 T850,150" fill="none" stroke="#1e293b" strokeWidth="3" opacity="0.4" />
+                <path d="M50,450 Q250,500 450,400 T850,450" fill="none" stroke="#1e293b" strokeWidth="3" opacity="0.4" />
+
+                {/* Pipelines (Green Dashed) */}
+                <motion.path 
+                  d="M100,520 L300,420 L500,480 L700,380" 
+                  fill="none" 
+                  stroke="#10b981" 
+                  strokeWidth="1.5" 
+                  strokeDasharray="8,4"
+                  animate={{ strokeDashoffset: [0, -24] }}
+                  transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+                  opacity="0.8"
+                />
+                <motion.path 
+                  d="M80,480 L280,380 L480,410 L680,310" 
+                  fill="none" 
+                  stroke="#10b981" 
+                  strokeWidth="1" 
+                  strokeDasharray="4,4"
+                  animate={{ strokeDashoffset: [0, -16] }}
+                  transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                  opacity="0.6"
+                />
+
+                {/* Tanker Routes (Orange Dashed) */}
+                <motion.path 
+                  d="M250,180 L450,280 L650,230 L850,330" 
+                  fill="none" 
+                  stroke="#f59e0b" 
+                  strokeWidth="2" 
+                  strokeDasharray="12,6"
+                  animate={{ strokeDashoffset: [0, 36] }}
+                  transition={{ repeat: Infinity, duration: 5, ease: "linear" }}
+                  opacity="0.7"
+                />
+
+                {/* Strait of Hormuz Label */}
+                <text x="700" y="340" fill="#fff" fontSize="10" fontWeight="black" letterSpacing="2" opacity="0.8">— STRAIT OF HORMUZ —</text>
+                <text x="710" y="355" fill="#64748b" fontSize="7" opacity="0.6">21 NM NAVIGABLE WIDTH</text>
+
+                {/* Tactical Markers (Dots & Icons) */}
+                {[
+                  { x: 520, y: 350, label: "TARGET ZONE", color: "#ef4444", type: "TARGET" },
+                  { x: 420, y: 250, label: "US BASE", color: "#3b82f6", type: "BASE" },
+                  { x: 620, y: 150, label: "IRAN BASE", color: "#ef4444", type: "BASE" },
+                  { x: 480, y: 420, label: "NUCLEAR FACILITY", color: "#f59e0b", type: "NUKE" },
+                  { x: 350, y: 380, label: "PIPELINE TERMINAL", color: "#10b981", type: "TERMINAL" },
+                  { x: 280, y: 220, label: "KUWAIT CITY", color: "#94a3b8", type: "CITY" },
+                  { x: 650, y: 420, label: "DUBAI", color: "#94a3b8", type: "CITY" },
+                ].map((marker, i) => (
+                  <g key={i}>
+                    <motion.circle 
+                      cx={marker.x} cy={marker.y} r="3" fill={marker.color} filter="url(#glow-cinematic)"
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 1.5 + i * 0.2 }}
+                    />
+                    <motion.circle 
+                      cx={marker.x} cy={marker.y} r="10" stroke={marker.color} fill="none" strokeWidth="0.5"
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: [0, 2], opacity: [0.4, 0] }}
+                      transition={{ repeat: Infinity, duration: 2.5, delay: i * 0.4 }}
+                    />
+                    <motion.text 
+                      x={marker.x + 8} y={marker.y + 3} fill={marker.color} fontSize="7" fontWeight="bold"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 0.8 }}
+                      transition={{ delay: 2 + i * 0.2 }}
+                    >
+                      {marker.label}
+                    </motion.text>
+                  </g>
+                ))}
+
+                {/* Scanning Radar Line */}
+                <motion.line 
+                  x1="0" y1="0" x2="1000" y2="0" 
+                  stroke="rgba(16, 185, 129, 0.15)" 
+                  strokeWidth="1"
+                  animate={{ y1: [0, 600], y2: [0, 600] }}
+                  transition={{ repeat: Infinity, duration: 5, ease: "linear" }}
+                />
+              </svg>
+            </motion.div>
+
+            {/* UI Overlays (OSINT Style) */}
+            
+            {/* Top Left: Zoom Controls */}
+            <div className="absolute top-8 left-8 flex flex-col gap-1">
+              <div className="w-8 h-8 bg-black/40 border border-white/20 flex items-center justify-center text-white text-lg font-bold cursor-default hover:bg-white/10">+</div>
+              <div className="w-8 h-8 bg-black/40 border border-white/20 flex items-center justify-center text-white text-lg font-bold cursor-default hover:bg-white/10">-</div>
+            </div>
+
+            {/* Top Right: Data Layers */}
+            <motion.div 
+              initial={{ x: 50, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 1 }}
+              className="absolute top-8 right-8 w-48 bg-black/60 border border-white/10 p-3 backdrop-blur-sm"
+            >
+              <p className="text-[8px] text-gray-500 mb-2 tracking-widest uppercase">Data Layers</p>
+              <div className="space-y-2">
+                {[
+                  { label: "Military Bases", color: "text-blue-400" },
+                  { label: "Nuclear Sites", color: "text-yellow-400" },
+                  { label: "Fires (FIRMS)", color: "text-orange-500" },
+                ].map((layer, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <motion.div 
+                      initial={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                      animate={{ backgroundColor: "rgba(16,185,129,0.4)" }}
+                      transition={{ delay: 2 + i * 0.5 }}
+                      className="w-3 h-3 border border-white/20 flex items-center justify-center"
+                    >
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 2.2 + i * 0.5 }}
+                        className="w-1.5 h-1.5 bg-white" 
+                      />
+                    </motion.div>
+                    <span className={`text-[8px] uppercase tracking-tighter ${layer.color}`}>{layer.label}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Bottom Left: Map Legend */}
+            <motion.div 
+              initial={{ y: 50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 1.5 }}
+              className="absolute bottom-8 left-8 w-56 bg-black/60 border border-white/10 p-4 backdrop-blur-sm"
+            >
+              <p className="text-[8px] text-gray-500 mb-3 tracking-widest uppercase">Map Legend</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-0.5 border-t border-dashed border-orange-500" />
+                  <span className="text-[7px] text-gray-400 uppercase">Tanker Route</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-0.5 border-t border-dashed border-emerald-500" />
+                  <span className="text-[7px] text-gray-400 uppercase">Pipeline Bypass</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span className="text-[7px] text-gray-400 uppercase">US Base</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-red-500" />
+                  <span className="text-[7px] text-gray-400 uppercase">Iran Base</span>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Center Content */}
+            <div className="relative z-10 text-center max-w-4xl">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 3 }}
+                className="mb-6"
+              >
+                <div className="inline-flex items-center gap-3 px-4 py-1 bg-red-600/10 border border-red-600/30 text-red-500 text-[10px] tracking-[0.4em] uppercase mb-4">
+                  <AlertTriangle className="w-3 h-3 animate-pulse" />
+                  Threat Level: Critical
+                </div>
+                <h1 className="text-7xl font-black tracking-tighter text-white mb-2 italic uppercase">
+                  Operation <span className="text-red-600">Hormuz</span>
+                </h1>
+                <p className="text-gray-500 tracking-[0.6em] uppercase text-[10px]">Strategic Defense Simulation</p>
+              </motion.div>
+              
+              <div className="flex flex-col items-center gap-8">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 4 }}
+                  className="flex gap-12"
+                >
+                  <div className="text-center">
+                    <p className="text-[8px] text-gray-600 uppercase mb-1">Satellite</p>
+                    <p className="text-xs text-white font-bold">SENTINEL-2B</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[8px] text-gray-600 uppercase mb-1">Coordinates</p>
+                    <p className="text-xs text-white font-bold">26.59°N 56.24°E</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[8px] text-gray-600 uppercase mb-1">Status</p>
+                    <p className="text-xs text-emerald-500 font-bold animate-pulse">LIVE FEED</p>
+                  </div>
+                </motion.div>
+
+                <motion.button 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 5 }}
+                  whileHover={{ scale: 1.05, backgroundColor: "rgba(239, 68, 68, 1)" }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setGameState('DIFFICULTY_SELECT')}
+                  className="group relative px-16 py-5 bg-red-600 text-white font-black tracking-[0.3em] uppercase transition-all overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+                  Proceed to Briefing
+                </motion.button>
+              </div>
+            </div>
+
+            {/* Scanning Lines Overlay */}
+            <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
           </motion.div>
         )}
 
@@ -1233,56 +1519,56 @@ export default function App() {
       </AnimatePresence>
 
       {/* Command Center UI Header */}
-      <div className="w-full max-w-[1000px] flex justify-between items-end mb-2 border-b border-emerald-500/30 pb-1 shrink-0">
-        <div className="flex items-center gap-4">
+      <div className="w-full max-w-[1000px] flex flex-wrap md:flex-nowrap justify-between items-end mb-2 border-b border-emerald-500/30 pb-1 shrink-0 gap-2 md:gap-0">
+        <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto">
           <button 
             onClick={() => {
               resetGameData();
               setGameState('INTRO');
             }}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-900 border border-gray-800 hover:bg-gray-800 text-gray-400 hover:text-white transition-colors group"
+            className="flex items-center gap-1 md:gap-2 px-2 py-1 md:px-3 md:py-2 bg-gray-900 border border-gray-800 hover:bg-gray-800 text-gray-400 hover:text-white transition-colors group"
             title="Return to Home"
           >
-            <Home className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            <span className="text-[10px] font-mono font-bold tracking-widest uppercase">Home</span>
+            <Home className="w-3 h-3 md:w-4 md:h-4 group-hover:scale-110 transition-transform" />
+            <span className="text-[8px] md:text-[10px] font-mono font-bold tracking-widest uppercase">Home</span>
           </button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-widest text-red-500 uppercase italic">Strait of Hormuz</h1>
-            <p className="text-[10px] font-mono text-red-900 uppercase tracking-tighter">
+          <div className="shrink-0">
+            <h1 className="text-lg md:text-2xl font-bold tracking-widest text-red-500 uppercase italic leading-none">Strait of Hormuz</h1>
+            <p className="text-[8px] md:text-[10px] font-mono text-red-900 uppercase tracking-tighter">
               Strike Protocol Active | {difficulty} | Sector {level}/5
             </p>
           </div>
         </div>
-        <div className="flex gap-4 items-center">
+        <div className="flex flex-wrap md:flex-nowrap gap-2 md:gap-4 items-center justify-end w-full md:w-auto">
           <div className="text-right">
-            <p className="text-[8px] font-mono text-gray-500 uppercase">Level</p>
-            <p className="text-base font-bold text-white font-mono">{level}</p>
+            <p className="text-[7px] md:text-[8px] font-mono text-gray-500 uppercase">Level</p>
+            <p className="text-xs md:text-base font-bold text-white font-mono">{level}</p>
           </div>
           <div className="text-right">
-            <p className="text-[8px] font-mono text-gray-500 uppercase">Missiles</p>
-            <p className={`text-base font-bold font-mono ${missilesRemaining <= 5 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{missilesRemaining}</p>
+            <p className="text-[7px] md:text-[8px] font-mono text-gray-500 uppercase">Missiles</p>
+            <p className={`text-xs md:text-base font-bold font-mono ${missilesRemaining <= 5 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{missilesRemaining}</p>
           </div>
           <div className="text-right">
-            <p className="text-[8px] font-mono text-gray-500 uppercase">Targets Destroyed</p>
-            <p className="text-base font-bold text-red-500 font-mono">{shipsDestroyed}/15</p>
+            <p className="text-[7px] md:text-[8px] font-mono text-gray-500 uppercase">Targets</p>
+            <p className="text-xs md:text-base font-bold text-red-500 font-mono">{shipsDestroyed}/15</p>
           </div>
           <div className="text-right">
-            <p className="text-[8px] font-mono text-gray-500 uppercase">Ship Escaped</p>
-            <p className="text-base font-bold text-yellow-500 font-mono">{shipsEscaped}/5</p>
+            <p className="text-[7px] md:text-[8px] font-mono text-gray-500 uppercase">Escaped</p>
+            <p className="text-xs md:text-base font-bold text-yellow-500 font-mono">{shipsEscaped}/5</p>
           </div>
           <div className="text-right">
-            <p className="text-[8px] font-mono text-gray-500 uppercase">Credits</p>
-            <p className="text-base font-bold text-emerald-500 font-mono">{score}</p>
+            <p className="text-[7px] md:text-[8px] font-mono text-gray-500 uppercase">Credits</p>
+            <p className="text-xs md:text-base font-bold text-emerald-500 font-mono">{score}</p>
           </div>
           <div className="text-right">
-            <p className="text-[8px] font-mono text-gray-500 uppercase">Base Integrity</p>
-            <p className={`text-base font-bold font-mono ${launchpadHealth <= 1 ? 'text-red-600 animate-pulse' : 'text-blue-500'}`}>
+            <p className="text-[7px] md:text-[8px] font-mono text-gray-500 uppercase">Base</p>
+            <p className={`text-xs md:text-base font-bold font-mono ${launchpadHealth <= 1 ? 'text-red-600 animate-pulse' : 'text-blue-500'}`}>
               {launchpadHealth}/5
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-[8px] font-mono text-gray-500 uppercase">Target Hull</p>
-            <div className="w-24 h-3 bg-gray-900 border border-gray-800 overflow-hidden">
+          <div className="text-right hidden sm:block">
+            <p className="text-[7px] md:text-[8px] font-mono text-gray-500 uppercase">Target Hull</p>
+            <div className="w-16 md:w-24 h-2 md:h-3 bg-gray-900 border border-gray-800 overflow-hidden">
               <motion.div 
                 className="h-full bg-red-600"
                 initial={{ width: '100%' }}
@@ -1295,12 +1581,18 @@ export default function App() {
       </div>
 
       {/* Game Canvas Container */}
-      <div className="relative border-2 border-emerald-500/20 shadow-[0_0_50px_rgba(16,185,129,0.1)] flex-1 min-h-0 flex items-center justify-center w-full max-w-[1000px]">
+      <div 
+        className="relative border-2 border-emerald-500/20 shadow-[0_0_50px_rgba(16,185,129,0.1)] flex-1 min-h-0 flex items-center justify-center w-full max-w-[1000px] touch-none"
+        onClick={(e) => fireMissile(e as any)}
+        onTouchStart={(e) => fireMissile(e as any)}
+        style={{ touchAction: 'none' }}
+      >
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
           className="cursor-crosshair block max-w-full max-h-full object-contain bg-[#0a192f] touch-none"
+          style={{ touchAction: 'none' }}
         />
 
         {/* Super Missile Button */}
@@ -1312,7 +1604,7 @@ export default function App() {
               e.stopPropagation();
               fireMissile({ clientX: 0, clientY: 0 } as any, true);
             }}
-            className="absolute top-4 left-1/2 bg-cyan-600 text-white px-6 py-2 rounded-full font-black tracking-widest uppercase border-b-4 border-cyan-800 hover:bg-cyan-500 active:border-b-0 z-10"
+            className="absolute top-4 left-1/2 bg-cyan-600 text-white px-4 py-2 md:px-6 md:py-2 rounded-full font-black tracking-widest uppercase border-b-4 border-cyan-800 hover:bg-cyan-500 active:border-b-0 z-10 text-[10px] md:text-sm"
           >
             Launch Super Missile ({superMissiles})
           </motion.button>
@@ -1332,6 +1624,24 @@ export default function App() {
           </p>
         </div>
 
+        {/* Mobile Shop Button (Floating) */}
+        {gameState === 'PLAYING' && (
+          <motion.button
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowShop(true);
+            }}
+            className="md:hidden absolute bottom-20 right-4 bg-emerald-600/80 text-white p-4 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] z-[60] backdrop-blur-sm border-2 border-emerald-400/50 active:scale-90 transition-transform"
+          >
+            <ShoppingCart className="w-6 h-6" />
+            <div className="absolute -top-1 -right-1 bg-red-600 text-[8px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+              SHOP
+            </div>
+          </motion.button>
+        )}
+
         {/* Overlays */}
         <AnimatePresence>
           {gameState === 'START' && (
@@ -1349,7 +1659,7 @@ export default function App() {
                 <p className="text-gray-400 font-mono text-xs mb-6 max-w-lg mx-auto">
                   The Strait is heavily guarded. Your objective is to neutralize 15 tankers. If 5 tankers escape, the mission is aborted.
                   <span className="block mt-2 text-yellow-500 font-bold uppercase">
-                    WARNING: DEFEND THE LAUNCHPAD FROM INCOMING MISSILES.
+                    WARNING: DEFEND THE 3 DEFENSIVE DOMES FROM INCOMING MISSILES.
                   </span>
                 </p>
                 
@@ -1361,8 +1671,8 @@ export default function App() {
                       <span className="text-[9px] text-gray-300 uppercase"><b className="text-white">Missile:</b> Your Weapon</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-2 bg-[#48bb78]" />
-                      <span className="text-[9px] text-gray-300 uppercase"><b className="text-white">Base:</b> Protect This</span>
+                      <div className="w-4 h-2 bg-[#48bb78] border border-cyan-400" />
+                      <span className="text-[9px] text-gray-300 uppercase"><b className="text-white">Dome:</b> Protect All 3</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-[#f6e05e] shadow-[0_0_5px_#f6e05e]" />
@@ -1449,7 +1759,7 @@ export default function App() {
                   <p className="text-red-500 text-lg uppercase">Critical Failure: Sector Compromised.</p>
                   <p className="text-gray-500 uppercase text-xs">Level {level} | Kills: {shipsDestroyed}</p>
                   {shipsEscaped >= 5 && <p className="text-red-400 animate-pulse">5 SHIPS LEFT THE SECTOR</p>}
-                  {launchpadHealth <= 0 && <p className="text-red-400 animate-pulse">LAUNCHPAD DESTROYED</p>}
+                  {launchpadHealth <= 0 && <p className="text-red-400 animate-pulse">DEFENSIVE DOMES DESTROYED</p>}
                 </div>
                 
                 <div className="flex gap-4 justify-center">
@@ -1473,19 +1783,22 @@ export default function App() {
       </div>
 
       {/* Bottom Controls & Shop */}
-      <div className="w-full max-w-[1000px] mt-4 flex justify-between items-center">
-        <div className="flex gap-4">
+      <div className="fixed bottom-0 left-0 w-full md:relative md:bottom-auto md:left-auto md:w-full max-w-[1000px] md:mt-4 flex flex-col md:flex-row justify-between items-center gap-2 md:gap-0 px-4 md:px-0 pb-2 md:pb-0 bg-black/80 md:bg-transparent backdrop-blur-md md:backdrop-blur-none z-50 border-t border-emerald-500/20 md:border-none">
+        <div className="flex gap-4 w-full md:w-auto justify-center md:justify-start py-2 md:py-0">
           <button 
-            onClick={() => setShowShop(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-all font-mono text-xs uppercase"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowShop(true);
+            }}
+            className="flex items-center gap-2 px-6 py-2 md:px-4 md:py-2 bg-emerald-500/20 md:bg-emerald-500/10 border-2 md:border border-emerald-500/50 md:border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-all font-mono text-sm md:text-xs uppercase shadow-[0_0_15px_rgba(16,185,129,0.2)]"
           >
-            <ShoppingCart className="w-4 h-4" /> Upgrade Systems
+            <ShoppingCart className="w-5 h-5 md:w-4 md:h-4" /> Upgrade Systems
           </button>
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 border border-gray-800 text-gray-500 font-mono text-[10px] uppercase">
             Difficulty: <span className="text-emerald-500">{difficulty}</span>
           </div>
         </div>
-        <div className="text-[10px] font-mono text-emerald-600 uppercase tracking-widest">
+        <div className="text-[10px] font-mono text-emerald-600 uppercase tracking-widest hidden md:block">
           Secure Communication Line: Active
         </div>
       </div>
@@ -1502,7 +1815,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-md bg-[#0d1117] border border-emerald-500/30 p-6 rounded-xl relative"
+              className="w-full max-w-md bg-[#0d1117] border border-emerald-500/30 p-4 md:p-6 rounded-xl relative max-h-[90vh] overflow-y-auto"
             >
               <button 
                 onClick={() => setShowShop(false)}
