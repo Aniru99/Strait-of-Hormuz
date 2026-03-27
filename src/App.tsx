@@ -15,8 +15,6 @@ type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 interface Entity {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
   width: number;
   height: number;
   color: string;
@@ -33,6 +31,8 @@ interface Hostile extends Entity {
 interface Missile extends Entity {
   targetX: number;
   targetY: number;
+  vx: number;
+  vy: number;
   isSuper?: boolean;
 }
 
@@ -54,14 +54,13 @@ const createSound = (type: 'launch' | 'explosion' | 'music' | 'baseHit' | 'tanke
   }
   
   if (type === 'music') {
-    // Simple rhythmic battle loop
-    const playNote = (freq: number, time: number, duration: number) => {
+    const playNote = (freq: number, time: number, duration: number, type: OscillatorType = 'sawtooth', vol = 0.04) => {
       if (!audioCtx) return;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.type = 'sawtooth';
+      osc.type = type;
       osc.frequency.setValueAtTime(freq, time);
-      gain.gain.setValueAtTime(0.05, time);
+      gain.gain.setValueAtTime(vol, time);
       gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
@@ -69,12 +68,14 @@ const createSound = (type: 'launch' | 'explosion' | 'music' | 'baseHit' | 'tanke
       osc.stop(time + duration);
     };
 
-    const tempo = 120;
+    const tempo = 150; // Faster, more intense tempo
     const secondsPerBeat = 60 / tempo;
-    for (let i = 0; i < 32; i++) {
-      const time = audioCtx.currentTime + i * secondsPerBeat * 0.5;
-      const freq = i % 8 === 0 ? 60 : i % 4 === 0 ? 80 : 40;
-      playNote(freq, time, 0.2);
+    for (let i = 0; i < 64; i++) {
+      const time = audioCtx.currentTime + i * secondsPerBeat * 0.25;
+      const freq = i % 16 === 0 ? 50 : i % 8 === 0 ? 70 : i % 4 === 0 ? 90 : 40;
+      playNote(freq, time, 0.1, 'sawtooth', 0.05);
+      if (i % 4 === 0) playNote(150, time, 0.05, 'square', 0.02); // Rhythmic metallic hit
+      if (i % 8 === 0) playNote(300, time, 0.1, 'sine', 0.01); // High tension synth
     }
     return;
   }
@@ -174,21 +175,18 @@ export default function App() {
   const [showShop, setShowShop] = useState(false);
   const [superMissiles, setSuperMissiles] = useState(0);
   const [superMissilesPurchasedThisLevel, setSuperMissilesPurchasedThisLevel] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  const [missilesRemaining, setMissilesRemaining] = useState(150);
   const [showOrientationWarning, setShowOrientationWarning] = useState(false);
 
   // Upgrades
-  const [missileSpeed, setMissileSpeed] = useState(10);
+  const [missileSpeed, setMissileSpeed] = useState(25); // Significantly faster
   const [tankerArmor, setTankerArmor] = useState(1); // Not used in attack mode for player, but kept for logic
-  const [cooldownRate, setCooldownRate] = useState(1);
+  const [cooldownRate, setCooldownRate] = useState(2.5); // Much faster reload
 
   const musicIntervalRef = useRef<any>(null);
 
   const startBattleMusic = () => {
     if (musicIntervalRef.current) clearInterval(musicIntervalRef.current);
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
     createSound('music');
     musicIntervalRef.current = setInterval(() => createSound('music'), 8000);
   };
@@ -226,8 +224,9 @@ export default function App() {
     setCooldown(0);
     setSuperMissiles(0);
     setSuperMissilesPurchasedThisLevel(0);
-    setMissileSpeed(10);
-    setCooldownRate(1);
+    setMissilesRemaining(150);
+    setMissileSpeed(25);
+    setCooldownRate(2.5);
     entitiesRef.current = {
       tankers: [],
       hostiles: [],
@@ -246,6 +245,7 @@ export default function App() {
     setTankerHealth(100);
     setCooldown(0);
     setSuperMissilesPurchasedThisLevel(0);
+    setMissilesRemaining(150);
     setLevel(1);
     entitiesRef.current = {
       tankers: [],
@@ -268,7 +268,6 @@ export default function App() {
         setLevel(1);
       } else {
         setGameState('MISSION_ACCOMPLISHED');
-        stopBattleMusic();
         return;
       }
     } else {
@@ -279,6 +278,7 @@ export default function App() {
     setShipsEscaped(0);
     setLaunchpadHealth(5);
     setSuperMissilesPurchasedThisLevel(0);
+    setMissilesRemaining(150);
     setGameState('PLAYING');
     entitiesRef.current = {
       tankers: [],
@@ -292,29 +292,10 @@ export default function App() {
 
   const spawnTanker = () => {
     const levelSpeed = 1 + (level * 0.2);
-    const mode = Math.random();
-    
-    let x, y, vx, vy;
-    
-    if (mode < 0.7) {
-      // Standard horizontal
-      x = -120;
-      y = 100 + Math.random() * 250;
-      vx = levelSpeed;
-      vy = (Math.random() - 0.5) * 0.4;
-    } else {
-      // "Up from the sea" / Middle entry
-      x = 100 + Math.random() * (CANVAS_WIDTH - 200);
-      y = CANVAS_HEIGHT + 60;
-      vx = (Math.random() - 0.5) * 1.5;
-      vy = -levelSpeed * 0.7;
-    }
-
+    const y = 100;
     entitiesRef.current.tankers.push({
-      x,
-      y,
-      vx,
-      vy,
+      x: -120,
+      y: y,
       width: 100,
       height: 40,
       color: '#2d3748', // Realistic dark steel
@@ -338,8 +319,6 @@ export default function App() {
     entitiesRef.current.hostiles.push({
       x,
       y,
-      vx: 0,
-      vy: 0,
       width: 25,
       height: 18,
       color: '#48bb78', // Defensive green
@@ -379,15 +358,16 @@ export default function App() {
     });
   };
 
-  const fireMissile = (e: React.MouseEvent<HTMLCanvasElement>, isSuper: boolean = false) => {
+  const fireMissile = (e: React.MouseEvent | MouseEvent, isSuper: boolean = false) => {
     if (gameState !== 'PLAYING' || (cooldown > 0 && !isSuper)) return;
     if (isSuper && superMissiles <= 0) return;
+    if (!isSuper && missilesRemaining <= 0) return;
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const targetX = e.clientX - rect.left;
-    const targetY = e.clientY - rect.top;
+    const targetX = (e as any).clientX - rect.left;
+    const targetY = (e as any).clientY - rect.top;
 
     const startX = CANVAS_WIDTH / 2;
     const startY = COASTLINE_Y;
@@ -414,8 +394,6 @@ export default function App() {
         entitiesRef.current.missiles.push({
           x: startX,
           y: startY,
-          vx: (tDx / tDist) * missileSpeed * 2,
-          vy: (tDy / tDist) * missileSpeed * 2,
           width: 10,
           height: 10,
           color: '#00ffff', // Cyan super missile
@@ -423,15 +401,16 @@ export default function App() {
           type: 'MISSILE',
           targetX: tX,
           targetY: tY,
+          vx: (tDx / tDist) * missileSpeed * 2,
+          vy: (tDy / tDist) * missileSpeed * 2,
           isSuper: true
         });
       }
     } else {
+      setMissilesRemaining(prev => prev - 1);
       entitiesRef.current.missiles.push({
         x: startX,
         y: startY,
-        vx: (dx / dist) * missileSpeed,
-        vy: (dy / dist) * missileSpeed,
         width: 6,
         height: 6,
         color: '#fc8181', // Red for attack
@@ -439,8 +418,10 @@ export default function App() {
         type: 'MISSILE',
         targetX,
         targetY,
+        vx: (dx / dist) * missileSpeed,
+        vy: (dy / dist) * missileSpeed,
       });
-      setCooldown(100);
+      setCooldown(30); // Even faster firing
     }
 
     createSound('launch');
@@ -454,11 +435,11 @@ export default function App() {
     // Cooldown
     setCooldown(prev => Math.max(0, prev - 2 * cooldownRate));
 
-    // Spawn Hostiles (Defenders in Attack mode) - REDUCED RATE
+    // Spawn Hostiles (Defenders in Attack mode)
     const now = Date.now();
-    let spawnRate = 4000;
-    if (difficulty === 'MEDIUM') spawnRate = 3000;
-    if (difficulty === 'HARD') spawnRate = 2000;
+    let spawnRate = 6000; // Much slower for Easy
+    if (difficulty === 'MEDIUM') spawnRate = 4000; // Slower for Medium
+    if (difficulty === 'HARD') spawnRate = 800;
 
     if (now - lastSpawnRef.current > spawnRate) {
       spawnHostile();
@@ -466,8 +447,8 @@ export default function App() {
     }
 
     // Spawn Incoming Missiles (Threat to Launchpad)
-    let incomingRate = 4000;
-    if (difficulty === 'MEDIUM') incomingRate = 3000;
+    let incomingRate = 10000; // Much slower for Easy
+    if (difficulty === 'MEDIUM') incomingRate = 6000; // Slower for Medium
     if (difficulty === 'HARD') incomingRate = 2000;
 
     if (now - lastIncomingMissileSpawnRef.current > incomingRate) {
@@ -478,15 +459,13 @@ export default function App() {
     // Update Tankers
     for (let i = tankers.length - 1; i >= 0; i--) {
       const t = tankers[i];
-      t.x += t.vx;
-      t.y += t.vy;
-      if (t.x > CANVAS_WIDTH + 150 || t.y < -100) {
+      t.x += t.speed;
+      if (t.x > CANVAS_WIDTH) {
         tankers.splice(i, 1);
         setShipsEscaped(prev => {
           const next = prev + 1;
           if (next >= 5) {
             setGameState('GAMEOVER');
-            stopBattleMusic();
           }
           return next;
         });
@@ -504,11 +483,14 @@ export default function App() {
       const distToLaunchpad = Math.sqrt(Math.pow(im.x - CANVAS_WIDTH/2, 2) + Math.pow(im.y - COASTLINE_Y, 2));
       if (distToLaunchpad < 20) {
         incomingMissiles.splice(i, 1);
+        
+        // Less damage on Easy/Medium
+        const damage = (difficulty === 'EASY' || difficulty === 'MEDIUM') ? 0.5 : 1;
+        
         setLaunchpadHealth(prev => {
-          const next = prev - 1;
+          const next = prev - damage;
           if (next <= 0) {
             setGameState('GAMEOVER');
-            stopBattleMusic();
           }
           return next;
         });
@@ -583,7 +565,10 @@ export default function App() {
           m.y > t.y
         ) {
           missiles.splice(i, 1);
-          const damage = m.isSuper ? 100 : 50;
+          // Standard missile: 50 damage (2 hits to kill 100 HP tanker)
+          // Super missile: 100 damage (1 hit to kill 100 HP tanker)
+          let damage = m.isSuper ? 100 : 50;
+
           setTankerHealth(prev => {
             const newHealth = prev - damage;
             if (newHealth <= 0) {
@@ -837,15 +822,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    const handleOrientation = () => {
-      if (window.innerHeight > window.innerWidth && window.innerWidth < 768) {
+    const checkDevice = () => {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isPortrait = window.innerHeight > window.innerWidth;
+      if (isMobile || (isPortrait && window.innerWidth < 1024)) {
         setShowOrientationWarning(true);
       } else {
         setShowOrientationWarning(false);
       }
     };
-    window.addEventListener('resize', handleOrientation);
-    handleOrientation();
+    window.addEventListener('resize', checkDevice);
+    checkDevice();
+    
+    // Attempt to start music on mount (may be blocked by browser)
+    startBattleMusic();
     
     // Start music on first interaction (Landing Page)
     const startMusic = () => {
@@ -859,7 +849,7 @@ export default function App() {
     window.addEventListener('touchstart', startMusic);
 
     return () => {
-      window.removeEventListener('resize', handleOrientation);
+      window.removeEventListener('resize', checkDevice);
       window.removeEventListener('click', startMusic);
       window.removeEventListener('keydown', startMusic);
       window.removeEventListener('touchstart', startMusic);
@@ -875,25 +865,31 @@ export default function App() {
 
   // --- Shop Logic ---
 
-  const buyUpgrade = (type: 'SPEED' | 'COOLDOWN' | 'SUPER') => {
+  const buyUpgrade = (type: 'SPEED' | 'COOLDOWN' | 'SUPER' | 'MISSILES') => {
     const cost = type === 'SUPER' ? 10 : 5;
     if (score < cost) return;
 
-    if (type === 'SUPER' && superMissilesPurchasedThisLevel >= 2) {
+    if (type === 'SUPER' && superMissilesPurchasedThisLevel >= 1) {
       return; // Limit reached
     }
 
     setScore(prev => prev - cost);
-    if (type === 'SPEED') setMissileSpeed(prev => prev + 2);
-    if (type === 'COOLDOWN') setCooldownRate(prev => prev + 0.5);
+    if (type === 'SPEED') setMissileSpeed(prev => prev + 5);
+    if (type === 'COOLDOWN') setCooldownRate(prev => prev + 1.0);
     if (type === 'SUPER') {
       setSuperMissiles(prev => prev + 1);
       setSuperMissilesPurchasedThisLevel(prev => prev + 1);
     }
+    if (type === 'MISSILES') {
+      setMissilesRemaining(prev => prev + 10);
+    }
   };
 
   return (
-    <div className="h-screen w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-2 overflow-hidden relative">
+    <div 
+      className="h-screen w-screen bg-[#0a0a0a] text-white font-sans flex flex-col items-center justify-center p-2 overflow-hidden relative"
+      onClick={(e) => fireMissile(e as any)}
+    >
       {/* Mobile Orientation Warning */}
       <AnimatePresence>
         {showOrientationWarning && (
@@ -904,8 +900,8 @@ export default function App() {
             className="fixed inset-0 z-[300] bg-black flex flex-col items-center justify-center p-10 text-center"
           >
             <RotateCcw className="w-20 h-20 text-red-500 mb-6 animate-spin" />
-            <h2 className="text-3xl font-black text-white mb-4 uppercase italic">Rotate Device</h2>
-            <p className="text-gray-400 font-mono text-sm uppercase tracking-widest">Please rotate your phone to landscape mode for tactical deployment.</p>
+            <h2 className="text-3xl font-black text-white mb-4 uppercase italic">Desktop Mode Required</h2>
+            <p className="text-gray-400 font-mono text-sm uppercase tracking-widest">This tactical simulation is optimized for desktop environments. Please switch to a desktop browser to engage in the Strait of Hormuz conflict.</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -974,19 +970,21 @@ export default function App() {
                   whileHover={{ scale: 1.1, letterSpacing: "0.4em" }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => {
-                    setGameState('DIFFICULTY_SELECT');
-                    if (audioCtx && audioCtx.state === 'suspended') {
-                      audioCtx.resume();
+                    if (!audioCtx || audioCtx.state === 'suspended') {
+                      startBattleMusic();
                     }
+                    setGameState('DIFFICULTY_SELECT');
                   }}
                   className="px-20 py-5 bg-red-600 text-white font-black tracking-[0.2em] uppercase hover:bg-red-500 transition-all skew-x-[-12deg] shadow-[10px_10px_0_rgba(0,0,0,1)]"
                 >
                   Initialize & Enter
                 </motion.button>
-                <div className="flex gap-4 text-[10px] font-mono text-gray-600 uppercase">
-                  <span>Level: {level}</span>
-                  <span>|</span>
-                  <span>Credits: {score}</span>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex gap-4 text-[10px] font-mono text-gray-600 uppercase">
+                    <span>Level: {level}</span>
+                    <span>|</span>
+                    <span>Credits: {score}</span>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -1066,7 +1064,6 @@ export default function App() {
               <button 
                 onClick={() => {
                   setGameState('INTRO');
-                  stopBattleMusic();
                 }}
                 className="px-16 py-5 bg-emerald-500 text-black font-black hover:bg-emerald-400 transition-all uppercase tracking-[0.4em] text-xl"
               >
@@ -1084,7 +1081,6 @@ export default function App() {
             onClick={() => {
               resetGameData();
               setGameState('INTRO');
-              stopBattleMusic();
             }}
             className="flex items-center gap-2 px-3 py-2 bg-gray-900 border border-gray-800 hover:bg-gray-800 text-gray-400 hover:text-white transition-colors group"
             title="Return to Home"
@@ -1103,6 +1099,10 @@ export default function App() {
           <div className="text-right">
             <p className="text-[8px] font-mono text-gray-500 uppercase">Level</p>
             <p className="text-base font-bold text-white font-mono">{level}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[8px] font-mono text-gray-500 uppercase">Missiles</p>
+            <p className={`text-base font-bold font-mono ${missilesRemaining <= 5 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{missilesRemaining}</p>
           </div>
           <div className="text-right">
             <p className="text-[8px] font-mono text-gray-500 uppercase">Targets Destroyed</p>
@@ -1142,7 +1142,6 @@ export default function App() {
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          onClick={fireMissile}
           className="cursor-crosshair block max-w-full max-h-full object-contain bg-[#0a192f]"
         />
 
@@ -1197,16 +1196,39 @@ export default function App() {
                 </p>
                 
                 <div className="mb-6 text-left bg-black/60 p-4 border border-red-600/20 font-mono">
+                  <p className="text-[10px] text-red-500 uppercase mb-2 font-bold tracking-widest">Tactical Legend:</p>
+                  <div className="grid grid-cols-2 gap-4 mb-4 border-b border-red-600/10 pb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-[#fc8181] shadow-[0_0_5px_#fc8181]" />
+                      <span className="text-[9px] text-gray-300 uppercase"><b className="text-white">Missile:</b> Your Weapon</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-2 bg-[#48bb78]" />
+                      <span className="text-[9px] text-gray-300 uppercase"><b className="text-white">Base:</b> Protect This</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-[#f6e05e] shadow-[0_0_5px_#f6e05e]" />
+                      <span className="text-[9px] text-gray-300 uppercase"><b className="text-white">Bomb:</b> Incoming Threat</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[10px] border-b-[#48bb78]" />
+                      <span className="text-[9px] text-gray-300 uppercase"><b className="text-white">Shield:</b> Enemy Interceptor</span>
+                    </div>
+                  </div>
+                  
                   <p className="text-[10px] text-red-500 uppercase mb-2 font-bold tracking-widest">Operational Intel:</p>
                   <ul className="text-[10px] text-gray-400 space-y-1">
                     <li>• <span className="text-white">PRIMARY:</span> Destroy 15 Tankers to advance.</li>
                     <li>• <span className="text-white">THREAT:</span> 5 Escapes = Mission Failure.</li>
-                    <li>• <span className="text-white">TACTICAL:</span> Buy Super Missiles in the Armory for 1-hit kills.</li>
+                    <li>• <span className="text-white">TACTICAL:</span> Standard missiles take 2 hits. Super Missiles take 1 hit.</li>
                     <li>• <span className="text-white">REWARD:</span> 1 Point per confirmed kill.</li>
                   </ul>
                 </div>
 
                 <div className="flex flex-col gap-4">
+                  <p className="text-[10px] font-mono text-emerald-500/60 uppercase tracking-[0.3em] animate-pulse text-center">
+                    Use mouse to launch missile
+                  </p>
                   <button 
                     onClick={() => startGame(difficulty)}
                     className="px-12 py-4 bg-red-600 text-white font-black hover:bg-red-500 transition-all uppercase tracking-[0.3em] text-lg shadow-[5px_5px_0_rgba(0,0,0,1)]"
@@ -1243,7 +1265,6 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setGameState('INTRO');
-                      stopBattleMusic();
                     }}
                     className="px-12 py-4 bg-gray-800 text-white font-black hover:bg-gray-700 transition-all uppercase tracking-[0.3em] text-lg"
                   >
@@ -1281,7 +1302,7 @@ export default function App() {
                     <RotateCcw className="w-6 h-6" /> Retry Level {level}
                   </button>
                   <button 
-                    onClick={() => { stopBattleMusic(); setGameState('INTRO'); }}
+                    onClick={() => { setGameState('INTRO'); }}
                     className="px-10 py-4 border-2 border-white text-white font-black hover:bg-white/10 transition-all uppercase tracking-widest text-lg"
                   >
                     Home
@@ -1379,6 +1400,22 @@ export default function App() {
                     5 PTS
                   </button>
                 </div>
+
+                {difficulty === 'HARD' && (
+                  <div className="p-4 bg-red-950/20 border border-red-500/10 rounded-lg flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-red-400">Extra Missiles</p>
+                      <p className="text-xs text-red-700 font-mono">+10 Tactical Missiles</p>
+                    </div>
+                    <button 
+                      disabled={score < 5}
+                      onClick={() => buyUpgrade('MISSILES')}
+                      className="px-4 py-2 bg-red-500 text-black font-bold text-xs rounded hover:bg-red-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      5 PTS
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="mt-8 pt-6 border-t border-emerald-500/20 flex justify-between items-center">
